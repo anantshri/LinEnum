@@ -262,7 +262,7 @@ user_info()
 
 
   #is root permitted to login via ssh
-  sshrootlogin=`grep "PermitRootLogin " /etc/ssh/sshd_config 2>/dev/null | grep -v "#" | awk '{print  $2}'`
+  sshrootlogin=`grep "^PermitRootLogin " /etc/ssh/sshd_config 2>/dev/null | awk '{print  $2}'`
   if [ "$sshrootlogin" = "yes" ]; then
     echo -e "\e[00;31mRoot is allowed to login via SSH:\e[00m" ; grep "^PermitRootLogin " /etc/ssh/sshd_config 2>/dev/null
     echo -e "\n" 
@@ -422,14 +422,14 @@ services_info()
   procperm=`ps aux 2>/dev/null | awk '{print $11}'|xargs -r ls -la 2>/dev/null |awk '!x[$0]++' 2>/dev/null`
   if [ "$procperm" ]; then
     echo -e "\e[00;31mProcess binaries & associated permissions (from above list):\e[00m\n$procperm\n" 
+    if [ "$export" ]; then
+      procpermbase=`ps aux 2>/dev/null | awk '{print $11}' | xargs -r ls 2>/dev/null | awk '!x[$0]++' 2>/dev/null`
+      mkdir $format/ps-export/ 2>/dev/null
+      for i in $procpermbase; do cp --parents $i $format/ps-export/; done 2>/dev/null
+    fi
   fi
 
-  if [ "$export" ] && [ "$procperm" ]; then
-  procpermbase=`ps aux 2>/dev/null | awk '{print $11}' | xargs -r ls 2>/dev/null | awk '!x[$0]++' 2>/dev/null`
-    mkdir $format/ps-export/ 2>/dev/null
-    for i in $procpermbase; do cp --parents $i $format/ps-export/; done 2>/dev/null
-  fi
-
+  
   #anything 'useful' in inetd.conf
   inetdread=`cat /etc/inetd.conf 2>/dev/null`
   if [ "$inetdread" ]; then
@@ -450,14 +450,12 @@ services_info()
   xinetdread=`cat /etc/xinetd.conf 2>/dev/null`
   if [ "$xinetdread" ]; then
     echo -e "\e[00;31mContents of /etc/xinetd.conf:\e[00m\n$xinetdread\n" 
+    if [ "$export" ]; then
+      mkdir $format/etc-export/ 2>/dev/null
+      cp /etc/xinetd.conf $format/etc-export/xinetd.conf 2>/dev/null
+    fi
   fi
 
-  if [ "$export" ] && [ "$xinetdread" ]; then
-    mkdir $format/etc-export/ 2>/dev/null
-    cp /etc/xinetd.conf $format/etc-export/xinetd.conf 2>/dev/null
-  else 
-    :
-  fi
 
   xinetdincd=`grep "/etc/xinetd.d" /etc/xinetd.conf 2>/dev/null`
   if [ "$xinetdincd" ]; then
@@ -585,7 +583,7 @@ software_configs()
   fi
 
   #anything in the default http home dirs
-  apachehomedirs=`ls -alhR /var/www/ 2>/dev/null; ls -alhR /srv/www/htdocs/ 2>/dev/null; ls -alhR /usr/local/www/apache2/data/ 2>/dev/null; ls -alhR /opt/lampp/htdocs/ 2>/dev/null`
+  apachehomedirs=`ls -alhR /var/www/ /srv/www/htdocs/ /usr/local/www/apache2/data/ /opt/lampp/htdocs/ 2>/dev/null`
   if [ "$apachehomedirs" ]; then
     echo -e "\e[00;31mAnything in the Apache home dirs?:\e[00m\n$apachehomedirs\n"
   fi
@@ -768,7 +766,8 @@ interesting_files()
   fi
 
   #looking for credentials in /etc/fstab
-  fstab=`grep username /etc/fstab 2>/dev/null |awk '{sub(/.*\username=/,"");sub(/\,.*/,"")}1' 2>/dev/null| xargs -r echo username: 2>/dev/null; grep password /etc/fstab 2>/dev/null |awk '{sub(/.*\password=/,"");sub(/\,.*/,"")}1' 2>/dev/null| xargs -r echo password: 2>/dev/null; grep domain /etc/fstab 2>/dev/null |awk '{sub(/.*\domain=/,"");sub(/\,.*/,"")}1' 2>/dev/null| xargs -r echo domain: 2>/dev/null`
+  #fstab=`grep username /etc/fstab 2>/dev/null |awk '{sub(/.*\username=/,"");sub(/\,.*/,"")}1' 2>/dev/null| xargs -r echo username: 2>/dev/null; grep password /etc/fstab 2>/dev/null |awk '{sub(/.*\password=/,"");sub(/\,.*/,"")}1' 2>/dev/null| xargs -r echo password: 2>/dev/null; grep domain /etc/fstab 2>/dev/null |awk '{sub(/.*\domain=/,"");sub(/\,.*/,"")}1' 2>/dev/null| xargs -r echo domain: 2>/dev/null`
+  fstab=`grep -Po "(?:username=(.*?)),|(?:password=(.*?)),|(?:domain=(.*?)),|"`
   if [ "$fstab" ]; then
     echo -e "\e[00;33m***Looks like there are credentials in /etc/fstab!\e[00m\n$fstab\n"
     if [ "$export" ]; then
