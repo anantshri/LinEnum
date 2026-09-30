@@ -710,6 +710,22 @@ if [ "$sudover" ]; then
   echo -e "\n"
 fi
 
+#redis details - if installed (from PR #62 by @Psmths)
+redisver=`redis-server --version 2>/dev/null`
+if [ "$redisver" ]; then
+  echo -e "\e[00;31m[-] Redis version:\e[00m\n$redisver"
+  echo -e "\n"
+fi
+
+#check if local redis requires auth - only if redis-cli exists (original PR flagged every host without redis)
+if [ "`command -v redis-cli 2>/dev/null`" ]; then
+  redisanon=`redis-cli "INFO" 2>/dev/null | grep "NOAUTH" 2>/dev/null`
+  if [ "$redisanon" ]; then
+    echo -e "\e[00;33m[+] Redis is running WITHOUT password protection:\e[00m\n$redisanon"
+    echo -e "\n"
+  fi
+fi
+
 #mysql details - if installed
 mysqlver=`mysql --version 2>/dev/null`
 if [ "$mysqlver" ]; then
@@ -1032,6 +1048,13 @@ fi
 rhostssys=`find /etc -iname hosts.equiv -exec ls -la {} 2>/dev/null \; -exec cat {} 2>/dev/null \;`
 if [ "$rhostssys" ]; then
   echo -e "\e[00;33m[+] Hosts.equiv file and contents: \e[00m\n$rhostssys" 
+  echo -e "\n"
+fi
+
+#connected NFS mounts - issue from PR #62 by @Psmths
+nfsmounts=`grep nfs /proc/mounts 2>/dev/null`
+if [ "$nfsmounts" ]; then
+  echo -e "\e[00;33m[+] Connected NFS mounts:\e[00m\n$nfsmounts"
   echo -e "\n"
 fi
 
