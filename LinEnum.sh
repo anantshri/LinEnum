@@ -1314,6 +1314,177 @@ if [ "$lxdgroup" ]; then
 fi
 }
 
+gap_checks()
+{
+echo -e "\e[00;33m### EXTRA CHECKS #########################################\e[00m"
+
+#writable PATH directories and relative PATH entries
+#as root, -w is true for every directory, so only world-writable entries count
+echo -e "\e[00;31m[-] Writable or relative PATH entries:\e[00m"
+path_hit=0
+oldifs=$IFS
+IFS=:
+for pdir in $PATH; do
+  if [ -z "$pdir" ] || [ "$pdir" = "." ]; then
+    echo -e "\e[00;33m[+] PATH contains an empty or '.' entry (commands resolve relative to cwd)\e[00m"
+    path_hit=1
+    continue
+  fi
+  [ -d "$pdir" ] || continue
+  path_target="$pdir"
+  if [ -L "$pdir" ]; then
+    path_target=`readlink -f "$pdir" 2>/dev/null`
+    [ -d "$path_target" ] || continue
+  fi
+  path_writable=0
+  if [ "$(id -u)" -ne 0 ]; then
+    [ -w "$path_target" ] && path_writable=1
+  else
+    path_mode=`stat -c %a "$path_target" 2>/dev/null`
+    case "$path_mode" in
+      *2|*3|*6|*7) path_writable=1 ;;
+    esac
+  fi
+  if [ "$path_writable" = "1" ]; then
+    echo -e "\e[00;33m[+] Writable directory in PATH:\e[00m"
+    ls -ld "$path_target" 2>/dev/null
+    path_hit=1
+  fi
+done
+IFS=$oldifs
+if [ "$path_hit" = "0" ]; then
+  echo "None found"
+fi
+echo -e "\n"
+
+#doas is a sudo alternative; readable rules are a direct privesc lead
+if command -v doas >/dev/null 2>&1 || [ -r /etc/doas.conf ] || [ -r /usr/local/etc/doas.conf ]; then
+  echo -e "\e[00;31m[-] doas present:\e[00m"
+  command -v doas 2>/dev/null
+  ls -la /etc/doas.conf /usr/local/etc/doas.conf 2>/dev/null
+  for doascfg in /etc/doas.conf /usr/local/etc/doas.conf; do
+    if [ -r "$doascfg" ]; then
+      echo -e "\e[00;33m[+] Readable doas rules ($doascfg):\e[00m"
+      grep -v '^#' "$doascfg" 2>/dev/null | grep -v '^$'
+    fi
+  done
+  echo -e "\n"
+fi
+
+#leftover screen/tmux sessions can be attached by the same user
+screen_list=`screen -ls 2>/dev/null`
+tmux_list=`tmux ls 2>/dev/null`
+if [ "$screen_list" ]; then
+  echo -e "\e[00;33m[+] GNU screen sessions:\e[00m\n$screen_list"
+  echo -e "\n"
+fi
+if [ "$tmux_list" ]; then
+  echo -e "\e[00;33m[+] tmux sessions:\e[00m\n$tmux_list"
+  echo -e "\n"
+fi
+for sdir in /run/screen /var/run/screen /tmp/screens; do
+  if [ -d "$sdir" ]; then
+    echo -e "\e[00;31m[-] Screen socket dir $sdir:\e[00m"
+    ls -la "$sdir" 2>/dev/null
+    echo -e "\n"
+  fi
+done
+
+#container runtime sockets reachable from this user
+for sock in /var/run/docker.sock /run/docker.sock /var/run/containerd/containerd.sock /run/containerd/containerd.sock; do
+  if [ -e "$sock" ]; then
+    echo -e "\e[00;31m[-] Container socket $sock:\e[00m"
+    ls -la "$sock" 2>/dev/null
+    if [ -r "$sock" ] || [ -w "$sock" ]; then
+      echo -e "\e[00;33m[+] $sock is accessible to the current user\e[00m"
+    fi
+    echo -e "\n"
+  fi
+done
+
+#broad capabilities on PID 1 usually means a privileged container
+if [ -f /.dockerenv ] || grep -qa docker /proc/1/cgroup 2>/dev/null || grep -qa container=lxc /proc/1/environ 2>/dev/null; then
+  capeff=`awk '/^CapEff:/{print $2}' /proc/1/status 2>/dev/null`
+  if [ "$capeff" ]; then
+    echo -e "\e[00;31m[-] PID 1 CapEff (container):\e[00m\n$capeff"
+    case "$capeff" in
+      *ffffffff*) echo -e "\e[00;33m[+] PID 1 CapEff looks broad; this often means a privileged container\e[00m" ;;
+    esac
+    echo -e "\n"
+  fi
+fi
+
+#kernel hardening knobs LinEnum does not already print
+aslr=`cat /proc/sys/kernel/randomize_va_space 2>/dev/null`
+if [ "$aslr" ]; then
+  echo -e "\e[00;31m[-] ASLR (randomize_va_space, 0=off 1=partial 2=full):\e[00m\n$aslr"
+  echo -e "\n"
+fi
+if [ -d /sys/module/apparmor ] || command -v aa-status >/dev/null 2>&1; then
+  echo -e "\e[00;31m[-] AppArmor:\e[00m"
+  aa-status 2>/dev/null | head -20
+  if [ -r /sys/module/apparmor/parameters/enabled ]; then
+    echo -n "module enabled: "
+    cat /sys/module/apparmor/parameters/enabled 2>/dev/null
+  fi
+  echo -e "\n"
+fi
+
+#library preload hijack
+if [ -r /etc/ld.so.preload ]; then
+  echo -e "\e[00;33m[+] /etc/ld.so.preload is readable:\e[00m"
+  cat /etc/ld.so.preload 2>/dev/null
+  echo -e "\n"
+fi
+if [ "$(id -u)" -ne 0 ]; then
+  ld_writable=`find /etc/ld.so.conf /etc/ld.so.conf.d -writable -type f 2>/dev/null`
+else
+  ld_writable=`find /etc/ld.so.conf /etc/ld.so.conf.d -type f -perm -0002 2>/dev/null`
+fi
+if [ "$ld_writable" ]; then
+  echo -e "\e[00;33m[+] Writable dynamic linker config:\e[00m\n$ld_writable"
+  echo -e "\n"
+fi
+
+#common credential files: report path and mode only, do not print contents
+cred_hit=0
+for cred in "$HOME/.netrc" "$HOME/.my.cnf" "$HOME/.pgpass" "$HOME/.docker/config.json" "$HOME/.kube/config" "$HOME/.aws/credentials" "$HOME/.git-credentials" "$HOME/.config/gcloud/application_default_credentials.json"; do
+  if [ -r "$cred" ]; then
+    if [ "$cred_hit" = "0" ]; then
+      echo -e "\e[00;33m[+] Readable credential files (contents not printed):\e[00m"
+      cred_hit=1
+    fi
+    ls -la "$cred" 2>/dev/null
+  fi
+done
+if [ "$cred_hit" = "1" ]; then
+  echo -e "\n"
+fi
+
+#groups that often imply extra read access; docker/lxd are reported elsewhere
+extra_groups=`id -nG 2>/dev/null | tr ' ' '\n' | grep -E '^(disk|adm|shadow|video|plugdev|lpadmin)$'`
+if [ "$extra_groups" ]; then
+  echo -e "\e[00;33m[+] Current user is in groups that can expose disks, logs or hardware:\e[00m\n$extra_groups"
+  echo -e "\n"
+fi
+
+#highlight the NFS privesc flag; full exports are already printed earlier
+nfs_squash=`grep -v '^#' /etc/exports 2>/dev/null | grep no_root_squash`
+if [ "$nfs_squash" ]; then
+  echo -e "\e[00;33m[+] NFS export with no_root_squash:\e[00m\n$nfs_squash"
+  echo -e "\n"
+fi
+
+#polkit binary and local rules, if present
+if command -v pkexec >/dev/null 2>&1 || [ -d /etc/polkit-1 ]; then
+  echo -e "\e[00;31m[-] polkit / pkexec:\e[00m"
+  command -v pkexec 2>/dev/null
+  pkexec --version 2>/dev/null
+  ls -la /etc/polkit-1/rules.d /etc/polkit-1/localauthority 2>/dev/null
+  echo -e "\n"
+fi
+}
+
 footer()
 {
 echo -e "\e[00;33m### SCAN COMPLETE ####################################\e[00m" 
@@ -1333,6 +1504,7 @@ call_each()
   interesting_files
   docker_checks
   lxc_container_checks
+  gap_checks
   footer
 }
 

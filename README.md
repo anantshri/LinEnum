@@ -59,6 +59,7 @@ High-level summary of the checks/tasks performed by LinEnum:
   * List permissions for /home/
 * Environmental:
   * Display current $PATH
+  * Flag relative or writable directories in $PATH
   * Displays env information
 * Jobs/Tasks:
   * List all cron jobs
@@ -101,3 +102,4 @@ High-level summary of the checks/tasks performed by LinEnum:
   * Checks to determine if we're in a Docker container
   * Checks to see if the host has Docker installed
   * Checks to determine if we're in an LXC container
+  * doas rules, screen/tmux sessions, container sockets, ASLR/AppArmor, ld.so preload, readable credential files, polkit
