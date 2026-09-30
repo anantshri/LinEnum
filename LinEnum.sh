@@ -818,7 +818,47 @@ echo -e "\n"
 #limited search for installed compilers
 compiler=`dpkg --list 2>/dev/null| grep compiler |grep -v decompiler 2>/dev/null && yum list installed 'gcc*' 2>/dev/null| grep gcc 2>/dev/null`
 if [ "$compiler" ]; then
-  echo -e "\e[00;31m[-] Installed compilers:\e[00m\n$compiler" 
+  echo -e "\\e[00;31m[-] Installed compilers:\\e[00m\n$compiler" 
+  echo -e "\\n"
+fi
+
+#installed dev tools/languages useful for exploit building - issue #29
+devtools=`which awk perl python python3 ruby ruby3.0 gcc cc g++ vi vim nmap ncat socat find netcat nc wget tftp ftp php lua luajit node 2>/dev/null`
+if [ "$devtools" ]; then
+  echo -e "\e[00;31m[-] Installed dev tools/languages (for exploit building):\e[00m\n$devtools"
+  echo -e "\n"
+fi
+
+#shell escape sequences for the tools found above - issue #29
+if [ "$devtools" ]; then
+  echo -e "\e[00;33m[+] Related shell escape sequences (if any of the above are available through sudo, these may lead to a shell):\e[00m"
+  if [ "`which vi 2>/dev/null`" ] || [ "`which vim 2>/dev/null`" ]; then
+    echo -e "  vi/vim\t\t: :!bash  |  :set shell=/bin/bash:shell"
+  fi
+  if [ "`which awk 2>/dev/null`" ]; then
+    echo -e "  awk\t\t: awk 'BEGIN {system(\"/bin/bash\")}'"
+  fi
+  if [ "`which perl 2>/dev/null`" ]; then
+    echo -e "  perl\t\t: perl -e 'exec \"/bin/bash\";'"
+  fi
+  if [ "`which python 2>/dev/null`" ] || [ "`which python3 2>/dev/null`" ]; then
+    echo -e "  python\t\t: import pty; pty.spawn('/bin/bash')  |  exit() to return"
+  fi
+  if [ "`which ruby 2>/dev/null`" ]; then
+    echo -e "  ruby\t\t: ruby: exec \"/bin/bash\""
+  fi
+  if [ "`which find 2>/dev/null`" ]; then
+    echo -e "  find\t\t: find . -exec /bin/sh \; -quit"
+  fi
+  if [ "`which nmap 2>/dev/null`" ]; then
+    echo -e "  nmap (old)\t: nmap --interactive  ->  !sh"
+  fi
+  if [ "`which less 2>/dev/null`" ] || [ "`which more 2>/dev/null`" ]; then
+    echo -e "  less/more\t: !sh"
+  fi
+  if [ "`which man 2>/dev/null`" ]; then
+    echo -e "  man\t\t: !sh"
+  fi
   echo -e "\n"
 fi
 
