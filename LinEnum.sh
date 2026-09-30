@@ -1006,6 +1006,18 @@ if [ "$export" ] && [ "$bsdusrplan" ]; then
   for i in $bsdusrplan; do cp --parents $i $format/plan_files/; done 2>/dev/null
 fi
 
+#are there any accessible trash folder files - could contain deleted sensitive files - issue #59
+trashfiles=`find /home /.Trash-999 /root -maxdepth 4 \( -path "*/.local/share/Trash/*" -o -path "*/.Trash*" \) -exec ls -la {} 2>/dev/null \;`
+if [ "$trashfiles" ]; then
+  echo -e "\\e[00;33m[+] Accessible trash folder contents (could contain deleted sensitive files):\\e[00m\\n$trashfiles"
+  echo -e "\\n"
+fi
+
+if [ "$export" ] && [ "$trashfiles" ]; then
+  mkdir $format/trash_files/ 2>/dev/null
+  for i in `find /home /root -maxdepth 4 \( -path "*/.local/share/Trash/files/*" -o -path "*/.Trash*/files/*" \) -type f 2>/dev/null`; do cp --parents $i $format/trash_files/ 2>/dev/null; done
+fi
+
 #are there any .rhosts files accessible - these may allow us to login as another user etc.
 rhostsusr=`find /home -iname *.rhosts -exec ls -la {} 2>/dev/null \; -exec cat {} 2>/dev/null \;`
 if [ "$rhostsusr" ]; then
