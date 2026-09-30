@@ -402,6 +402,13 @@ if [ "$umaskdef" ]; then
   echo -e "\n"
 fi
 
+#ptrace_scope value - if 0, processes can ptrace each other (see sudo_inject) - issue #35
+ptracescope=`cat /proc/sys/kernel/yama/ptrace_scope 2>/dev/null`
+if [ "$ptracescope" ]; then
+  echo -e "\e[00;31m[-] ptrace_scope value (0 means processes can ptrace each other - see https://github.com/nongiach/sudo_inject):\e[00m\n$ptracescope"
+  echo -e "\n"
+fi
+
 #password policy information as stored in /etc/login.defs
 logindefs=`grep "^PASS_MAX_DAYS\|^PASS_MIN_DAYS\|^PASS_WARN_AGE\|^ENCRYPT_METHOD" /etc/login.defs 2>/dev/null`
 if [ "$logindefs" ]; then
